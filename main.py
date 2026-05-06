@@ -21,51 +21,77 @@
 #         print("Client disconnected")
 
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from asyncio import Queue
-import asyncio
+# from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+# from asyncio import Queue
+# import asyncio
 
+# app = FastAPI()
+
+# @app.get("/")
+# async def root():
+#     return {"status": "ok", "websocket": "ws://localhost:8000/ws"}
+
+# # ---------- WebSocket Endpoint ----------
+# @app.websocket("/ws")
+# async def websocket_endpoint(websocket: WebSocket):
+#     await websocket.accept()
+#     await websocket.send_text("Connected!")
+
+#     queue = Queue()
+
+#     # Run sender and receiver concurrently
+#     await asyncio.gather(
+#         receiver(websocket, queue),
+#         sender(websocket, queue),
+#     )
+
+
+# # ---------- Receiver ----------
+# async def receiver(websocket: WebSocket, queue: Queue):
+#     """Listens for incoming messages and puts them in a queue."""
+#     try:
+#         while True:
+#             message = await websocket.receive_text()
+#             print(f"[RECEIVED] {message}")
+#             await queue.put(message)
+#     except WebSocketDisconnect:
+#         print("[RECEIVER] Client disconnected")
+#         await queue.put(None)  # Signal sender to stop
+
+# # ---------- Sender ----------
+# async def sender(websocket: WebSocket, queue: Queue):
+#     """Reads from the queue and sends messages to the client."""
+#     while True:
+#         message = await queue.get()
+#         if message is None:
+#             break  # Stop signal received
+#         response = f"Echo: {message}"
+#         print(f"[SENT] {response}")
+#         await websocket.send_text(response)
+
+
+
+from fastapi import FastAPI
+import socketio
+
+sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 app = FastAPI()
+socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "websocket": "ws://localhost:8000/ws"}
+    return {"status": "ok"}
 
-# ---------- WebSocket Endpoint ----------
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    await websocket.send_text("Connected!")
+@sio.event
+async def connect(sid, environ):
+    print(f"Client connected: {sid}")
+    await sio.emit("message", "Connected!", to=sid)
 
-    queue = Queue()
+@sio.event
+async def disconnect(sid):
+    print(f"Client disconnected: {sid}")
 
-    # Run sender and receiver concurrently
-    await asyncio.gather(
-        receiver(websocket, queue),
-        sender(websocket, queue),
-    )
-
-
-# ---------- Receiver ----------
-async def receiver(websocket: WebSocket, queue: Queue):
-    """Listens for incoming messages and puts them in a queue."""
-    try:
-        while True:
-            message = await websocket.receive_text()
-            print(f"[RECEIVED] {message}")
-            await queue.put(message)
-    except WebSocketDisconnect:
-        print("[RECEIVER] Client disconnected")
-        await queue.put(None)  # Signal sender to stop
-
-# ---------- Sender ----------
-async def sender(websocket: WebSocket, queue: Queue):
-    """Reads from the queue and sends messages to the client."""
-    while True:
-        message = await queue.get()
-        if message is None:
-            break  # Stop signal received
-        response = f"Echo: {message}"
-        print(f"[SENT] {response}")
-        await websocket.send_text(response)
-
+@sio.event
+async def message(sid, data):
+    print(f"Message from {sid}: {data}")
+    await sio.emit("message", f"Echo: {data}", to=sid)
