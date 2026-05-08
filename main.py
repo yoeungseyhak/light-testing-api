@@ -65,41 +65,6 @@ async def sender(websocket: WebSocket, queue: Queue):
         message = await queue.get()
         if message is None:
             break  # Stop signal received
-        response = f"Echo: {message}"
+        response = message
         print(f"[SENT] {response}")
         await websocket.send_text(response)
-
-
-
-# import socketio
-# import uvicorn
-# from fastapi import FastAPI
-
-# sio = socketio.AsyncServer(
-#     async_mode="asgi",
-#     cors_allowed_origins="*",
-#     transports=["polling", "websocket"],  # ✅ allow both
-# )
-
-# app = FastAPI()
-# socket_app = socketio.ASGIApp(sio, socketio_path="socket.io")
-
-# @app.get("/")
-# async def root():
-#     return {"status": "ok"}
-
-# @sio.event
-# async def connect(sid, environ):
-#     print(f"✅ Connected: {sid}")
-
-# @sio.event
-# async def disconnect(sid):
-#     print(f"❌ Disconnected: {sid}")
-
-# @sio.event
-# async def message(sid, data):
-#     print(f"📨 Message: {data}")
-#     await sio.emit("message", f"Echo: {data}", to=sid)
-
-# if __name__ == "__main__":
-#     uvicorn.run(socket_app, host="0.0.0.0", port=8000)
