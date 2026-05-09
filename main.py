@@ -27,6 +27,8 @@ import asyncio
 
 app = FastAPI()
 
+connected_clients: list[WebSocket] = []
+
 @app.get("/")
 async def root():
     return {"status": "ok", "websocket": "ws://localhost:8000/ws"}
@@ -35,6 +37,7 @@ async def root():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
+    connected_clients.append(websocket)
     await websocket.send_text("Connected!")
 
     queue = Queue()
@@ -67,4 +70,9 @@ async def sender(websocket: WebSocket, queue: Queue):
             break  # Stop signal received
         response = message
         print(f"[SENT] {response}")
-        await websocket.send_text(response)
+
+        for client in connected_clients:
+            try:
+                await client.send_text(response)
+            except:
+                connected_clients.remove(websocket)
