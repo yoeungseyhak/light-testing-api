@@ -1,78 +1,46 @@
-# from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-
-# app = FastAPI()
-
-
-# @app.get("/")
-# async def root():
-#     return {"status": "ok", "websocket": "ws://localhost:8000/ws"}
-
-
-# @app.websocket("/ws")
-# async def websocket_endpoint(websocket: WebSocket):
-#     await websocket.accept()
-#     await websocket.send_text("Connected!")
-
-#     try:
-#         while True:
-#             message = await websocket.receive_text()
-#             await websocket.send_text(f"Echo: {message}")
-#     except WebSocketDisconnect:
-#         print("Client disconnected")
-
-
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from asyncio import Queue
 import asyncio
+import json
 
 app = FastAPI()
 
+# ✅ Global shared list of clients
 connected_clients: list[WebSocket] = []
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "websocket": "ws://localhost:8000/ws"}
+    return {"status": "ok", "message": "WELCOME"}
 
-# ---------- WebSocket Endpoint ----------
+# ✅ Broadcast to ALL clients
+async def broadcast(message: str, sender: WebSocket):
+    disconnected = []
+    for client in connected_clients:
+        try:
+            await client.send_text(message)
+        except Exception:
+            disconnected.append(client)  # mark dead clients
+
+    # Clean up dead clients
+    for client in disconnected:
+        if client in connected_clients:
+            connected_clients.remove(client)
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     connected_clients.append(websocket)
-    await websocket.send_text("Connected!")
+    print(f"[CONNECTED] {websocket.client} | Total: {len(connected_clients)}")
 
-    queue = Queue()
-
-    # Run sender and receiver concurrently
-    await asyncio.gather(
-        receiver(websocket, queue),
-        sender(websocket, queue),
-    )
-
-
-# ---------- Receiver ----------
-async def receiver(websocket: WebSocket, queue: Queue):
-    """Listens for incoming messages and puts them in a queue."""
     try:
+        await websocket.send_text("Connected!")
         while True:
             message = await websocket.receive_text()
-            print(f"[RECEIVED] {message}")
-            await queue.put(message)
+            print(f"[RECEIVED] {message} from {websocket.client}")
+
+            # ✅ Broadcast to everyone including ESP32
+            await broadcast(message, websocket)
+
     except WebSocketDisconnect:
-        print("[RECEIVER] Client disconnected")
-        await queue.put(None)  # Signal sender to stop
-
-# ---------- Sender ----------
-async def sender(websocket: WebSocket, queue: Queue):
-    """Reads from the queue and sends messages to the client."""
-    while True:
-        message = await queue.get()
-        if message is None:
-            break  # Stop signal received
-        response = message
-        print(f"[SENT] {response}")
-
-        for client in connected_clients:
-            try:
-                await client.send_text(response)
-            except:
-                connected_clients.remove(websocket)
+        print(f"[DISCONNECTED] {websocket.client}")
+        if websocket in connected_clients:
+            connected_clients.remove(websocket)
